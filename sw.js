@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-grocery-v2';
+const CACHE_NAME = 'smart-grocery-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
   './css/app.css',
   './js/calculator.js',
   './js/store.js',
+  './js/recipes.js',
   './js/app.js'
 ];
 

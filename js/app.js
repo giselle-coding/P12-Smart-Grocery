@@ -5,6 +5,7 @@
 
 import { Store } from './store.js';
 import { Calculator } from './calculator.js';
+import { RECIPES_DATA, matchRecipesWithItems, isFoodItem } from './recipes.js';
 
 // Sound & Haptic FX via Web Audio API
 class AudioFeedback {
@@ -156,7 +157,16 @@ const DOM = {
   simDiscount: document.getElementById('simDiscount'),
   simGrossResult: document.getElementById('simGrossResult'),
   simSavedResult: document.getElementById('simSavedResult'),
-  simNetResult: document.getElementById('simNetResult'),
+  // Recipe Ideas Elements
+  btnOpenRecipesModal: document.getElementById('btnOpenRecipesModal'),
+  recipesModalOverlay: document.getElementById('recipesModalOverlay'),
+  btnCloseRecipesModal: document.getElementById('btnCloseRecipesModal'),
+  recipeReadyCountBadge: document.getElementById('recipeReadyCountBadge'),
+  recipeBannerDesc: document.getElementById('recipeBannerDesc'),
+  recipeSourceCart: document.getElementById('recipeSourceCart'),
+  recipeSourceAll: document.getElementById('recipeSourceAll'),
+  detectedFoodStrip: document.getElementById('detectedFoodStrip'),
+  recipesListContainer: document.getElementById('recipesListContainer'),
 
   toastContainer: document.getElementById('toastContainer')
 };
@@ -371,6 +381,7 @@ function renderCart() {
 
   // Bind cart interactive actions
   bindCartEvents();
+  updateRecipeBadge();
   refreshIcons();
 }
 
@@ -924,6 +935,211 @@ DOM.categoryFilters.forEach(btn => {
   };
 });
 
+// ================= Ide Resep Makanan Cerdas (Khusus Bahan Makanan) =================
+let currentRecipeSource = 'CART';
+
+function updateRecipeBadge() {
+  const cart = Store.getCart();
+  const recipes = matchRecipesWithItems(cart);
+  const readyCount = recipes.filter(r => r.isReady).length;
+
+  if (DOM.recipeReadyCountBadge) {
+    if (readyCount > 0) {
+      DOM.recipeReadyCountBadge.textContent = `${readyCount} Siap Masak`;
+      DOM.recipeReadyCountBadge.className = 'bg-emerald-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-sm';
+      if (DOM.recipeBannerDesc) {
+        DOM.recipeBannerDesc.textContent = `${readyCount} resep bisa langsung dimasak dari bahan makanan di troli!`;
+      }
+    } else {
+      DOM.recipeReadyCountBadge.textContent = 'Cek Resep';
+      DOM.recipeReadyCountBadge.className = 'bg-amber-500/30 text-amber-300 font-bold text-[10px] px-2 py-0.5 rounded-full';
+      if (DOM.recipeBannerDesc) {
+        DOM.recipeBannerDesc.textContent = 'Lihat ide masakan kosan & bahan yang perlu ditambah';
+      }
+    }
+  }
+}
+
+function renderRecipes() {
+  let sourceItems = [];
+  if (currentRecipeSource === 'CART') {
+    sourceItems = Store.getCart();
+  } else {
+    // Gabungan troli + riwayat belanja sebelumnya
+    const cart = Store.getCart();
+    const history = Store.getHistory();
+    const historyItems = history.flatMap(trip => trip.items || []);
+    sourceItems = [...cart, ...historyItems];
+  }
+
+  // Filter KHUSUS MAKANAN saja (Mengabaikan barang mandi/deterjen dll)
+  const foodItems = sourceItems.filter(isFoodItem);
+  const distinctFoodNames = Array.from(new Set(foodItems.map(i => i.name.trim())));
+
+  // Render Detected Food Strip
+  if (!DOM.detectedFoodStrip) return;
+
+  if (distinctFoodNames.length === 0) {
+    DOM.detectedFoodStrip.innerHTML = `
+      <div class="text-slate-400 text-center py-2">
+        <span class="block text-slate-400 font-medium mb-1">Belum ada bahan makanan terdeteksi.</span>
+        <span class="text-[11px] text-slate-500">Masukkan telur, beras, mie, bumbu, sayur, atau lauk ke troli!</span>
+      </div>
+    `;
+  } else {
+    DOM.detectedFoodStrip.innerHTML = `
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-slate-300 font-bold flex items-center gap-1">
+          <span>🥕 Bahan Makanan Terdeteksi (${distinctFoodNames.length}):</span>
+        </span>
+        <span class="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">
+          Non-Mandi Tersaring ✓
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+        ${distinctFoodNames.map(name => `
+          <span class="bg-slate-900 border border-slate-700/80 text-slate-200 px-2 py-0.5 rounded-md text-[11px] font-medium">
+            ${name}
+          </span>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Match Recipes
+  const matched = matchRecipesWithItems(sourceItems);
+
+  if (!DOM.recipesListContainer) return;
+
+  DOM.recipesListContainer.innerHTML = matched.map(recipe => {
+    const isReadyBadge = recipe.isReady
+      ? `<span class="bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm shadow-emerald-500/30">
+           <i data-lucide="check-circle" class="w-3 h-3"></i> Siap Dimasak!
+         </span>`
+      : `<span class="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+           <i data-lucide="clock" class="w-3 h-3"></i> ${recipe.matchPercent}% Cocok
+         </span>`;
+
+    return `
+      <div class="bg-slate-900 border ${recipe.isReady ? 'border-emerald-500/40 bg-emerald-950/15' : 'border-slate-800'} rounded-2xl p-3.5 space-y-2.5 transition">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-1.5 flex-wrap mb-0.5">
+              <span class="text-[10px] bg-slate-800 text-slate-300 font-bold px-1.5 py-0.5 rounded">
+                ${recipe.category}
+              </span>
+              <span class="text-[10px] text-slate-400 flex items-center gap-0.5">
+                <i data-lucide="clock" class="w-3 h-3"></i> ${recipe.prepTime}
+              </span>
+            </div>
+            <h4 class="text-sm font-extrabold text-white">${recipe.title}</h4>
+            <p class="text-xs text-slate-400">${recipe.subtitle}</p>
+          </div>
+          <div class="shrink-0">
+            ${isReadyBadge}
+          </div>
+        </div>
+
+        <!-- Progress Bahan -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-[11px]">
+            <span class="text-slate-400">Kesiapan Bahan:</span>
+            <span class="${recipe.isReady ? 'text-emerald-400 font-bold' : 'text-slate-300 font-semibold'}">
+              ${recipe.owned.length} dari ${recipe.ingredients.length} bahan
+            </span>
+          </div>
+          <div class="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full ${recipe.isReady ? 'bg-emerald-400' : 'bg-amber-400'}" style="width: ${recipe.matchPercent}%"></div>
+          </div>
+        </div>
+
+        <!-- Checklist Bahan (Tersedia vs Perlu Beli) -->
+        <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-2.5 space-y-1.5 text-xs">
+          ${recipe.owned.length > 0 ? `
+            <div>
+              <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
+                ✓ Ada di Belanjaan:
+              </span>
+              <div class="flex flex-wrap gap-1">
+                ${recipe.owned.map(ing => `
+                  <span class="text-[11px] bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-md font-medium">
+                    ${ing}
+                  </span>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${recipe.missing.length > 0 ? `
+            <div class="${recipe.owned.length > 0 ? 'pt-1.5 border-t border-slate-800/80' : ''}">
+              <span class="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                + Belum Ada (Bisa Ditambah ke Troli):
+              </span>
+              <div class="flex flex-wrap gap-1">
+                ${recipe.missing.map(ing => `
+                  <span class="text-[11px] bg-slate-900 border border-amber-500/20 text-slate-400 px-2 py-0.5 rounded-md font-medium">
+                    ${ing}
+                  </span>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Accordion Langkah Memasak -->
+        <details class="text-xs text-slate-300">
+          <summary class="cursor-pointer font-bold text-emerald-400 py-1 hover:underline flex items-center justify-between">
+            <span>📖 Cara Masak Cepat (${recipe.steps.length} Langkah)</span>
+          </summary>
+          <ol class="mt-2 space-y-1.5 pl-4 list-decimal text-slate-300 border-l-2 border-emerald-500/30 ml-1 py-1">
+            ${recipe.steps.map(step => `
+              <li class="leading-relaxed pl-1">${step}</li>
+            `).join('')}
+          </ol>
+        </details>
+      </div>
+    `;
+  }).join('');
+
+  refreshIcons();
+}
+
+function setupRecipesModule() {
+  if (DOM.btnOpenRecipesModal) {
+    DOM.btnOpenRecipesModal.onclick = () => {
+      sound.playClick();
+      renderRecipes();
+      DOM.recipesModalOverlay.classList.add('active');
+    };
+  }
+
+  if (DOM.btnCloseRecipesModal) {
+    DOM.btnCloseRecipesModal.onclick = () => {
+      DOM.recipesModalOverlay.classList.remove('active');
+    };
+  }
+
+  if (DOM.recipeSourceCart) {
+    DOM.recipeSourceCart.onclick = () => {
+      sound.playClick();
+      currentRecipeSource = 'CART';
+      DOM.recipeSourceCart.className = 'py-2 rounded-lg bg-slate-800 text-emerald-400 shadow transition font-bold';
+      DOM.recipeSourceAll.className = 'py-2 rounded-lg text-slate-400 hover:text-white transition font-bold';
+      renderRecipes();
+    };
+  }
+
+  if (DOM.recipeSourceAll) {
+    DOM.recipeSourceAll.onclick = () => {
+      sound.playClick();
+      currentRecipeSource = 'ALL';
+      DOM.recipeSourceAll.className = 'py-2 rounded-lg bg-slate-800 text-emerald-400 shadow transition font-bold';
+      DOM.recipeSourceCart.className = 'py-2 rounded-lg text-slate-400 hover:text-white transition font-bold';
+      renderRecipes();
+    };
+  }
+}
+
 // ================= PWA Service Worker Registration =================
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -943,6 +1159,7 @@ function initApp() {
   setupCheckoutModal();
   setupBudgetControls();
   setupSimulator();
+  setupRecipesModule();
   renderCart();
   registerServiceWorker();
   refreshIcons();

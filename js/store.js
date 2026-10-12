@@ -10,41 +10,90 @@ const STORAGE_KEYS = {
   SETTINGS: 'smart_grocery_settings_v1'
 };
 
-// Data benchmark awal (Bulan Lalu) khusus anak rantau
+// Data benchmark acuan harga pasar & supermarket riil Indonesia
 const DEFAULT_BENCHMARKS = [
-  { name: 'Beras Ramos 5kg', category: 'Sembako', unit: 'pack', lastPrice: 72000, lastDate: '2026-09-10' },
-  { name: 'Minyak Goreng 2L', category: 'Sembako', unit: 'liter', lastPrice: 34500, lastDate: '2026-09-10' },
-  { name: 'Telur Ayam 1kg', category: 'Daging & Telur', unit: 'kg', lastPrice: 28000, lastDate: '2026-09-10' },
-  { name: 'Indomie Goreng (Pack isi 5)', category: 'Sembako', unit: 'pack', lastPrice: 15500, lastDate: '2026-09-10' },
-  { name: 'Kecap Manis Bango 550ml', category: 'Bumbu & Dapur', unit: 'botol', lastPrice: 24000, lastDate: '2026-09-10' },
-  { name: 'Sabun Mandi Refill 450ml', category: 'Perlengkapan Mandi', unit: 'pack', lastPrice: 22500, lastDate: '2026-09-10' },
-  { name: 'Pasta Gigi Herbal 190g', category: 'Perlengkapan Mandi', unit: 'pcs', lastPrice: 16000, lastDate: '2026-09-10' },
-  { name: 'Deterjen Cair 750ml', category: 'Perlengkapan Mandi', unit: 'pack', lastPrice: 19500, lastDate: '2026-09-10' },
-  { name: 'Susu UHT Full Cream 1L', category: 'Minuman', unit: 'liter', lastPrice: 19000, lastDate: '2026-09-10' },
-  { name: 'Nugget Ayam 500g', category: 'Daging & Telur', unit: 'pack', lastPrice: 43000, lastDate: '2026-09-10' },
-  { name: 'Bawang Merah 250g', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 12000, lastDate: '2026-09-10' },
-  { name: 'Bawang Putih 250g', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 11000, lastDate: '2026-09-10' }
+  // --- SEMBAKO ---
+  { name: 'Beras Ramos 5kg', category: 'Sembako', unit: 'pack', lastPrice: 74000, lastDate: '2026-09-15' },
+  { name: 'Beras Pandan Wangi 5kg', category: 'Sembako', unit: 'pack', lastPrice: 82000, lastDate: '2026-09-15' },
+  { name: 'Minyak Goreng 2L', category: 'Sembako', unit: 'liter', lastPrice: 35000, lastDate: '2026-09-15' },
+  { name: 'Minyak Goreng 1L', category: 'Sembako', unit: 'liter', lastPrice: 18000, lastDate: '2026-09-15' },
+  { name: 'Telur Ayam 1kg', category: 'Daging & Telur', unit: 'kg', lastPrice: 28500, lastDate: '2026-09-15' },
+  { name: 'Indomie Goreng (Pack isi 5)', category: 'Sembako', unit: 'pack', lastPrice: 15500, lastDate: '2026-09-15' },
+  { name: 'Indomie Kuah Soto (Pack isi 5)', category: 'Sembako', unit: 'pack', lastPrice: 14500, lastDate: '2026-09-15' },
+  { name: 'Gula Pasir Gulaku 1kg', category: 'Sembako', unit: 'kg', lastPrice: 17500, lastDate: '2026-09-15' },
+  { name: 'Tepung Terigu Segitiga Biru 1kg', category: 'Sembako', unit: 'kg', lastPrice: 12500, lastDate: '2026-09-15' },
+  { name: 'Garam Dapur Beriodium 250g', category: 'Bumbu & Dapur', unit: 'pcs', lastPrice: 3500, lastDate: '2026-09-15' },
+
+  // --- BUMBU & DAPUR ---
+  { name: 'Bawang Merah 250g', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 10000, lastDate: '2026-09-15' },
+  { name: 'Bawang Putih 250g', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 11000, lastDate: '2026-09-15' },
+  { name: 'Cabai Rawit Merah 100g', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 8000, lastDate: '2026-09-15' },
+  { name: 'Cabai Merah Keriting 250g', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 12500, lastDate: '2026-09-15' },
+  { name: 'Kecap Manis Bango 550ml', category: 'Bumbu & Dapur', unit: 'botol', lastPrice: 24500, lastDate: '2026-09-15' },
+  { name: 'Saus Sambal Botol 335ml', category: 'Bumbu & Dapur', unit: 'botol', lastPrice: 14000, lastDate: '2026-09-15' },
+  { name: 'Saus Tiram Saori 133ml', category: 'Bumbu & Dapur', unit: 'botol', lastPrice: 11500, lastDate: '2026-09-15' },
+  { name: 'Margarin Blue Band 200g', category: 'Bumbu & Dapur', unit: 'pcs', lastPrice: 10500, lastDate: '2026-09-15' },
+  { name: 'Royco Rasa Ayam (Pack isi 12)', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 6000, lastDate: '2026-09-15' },
+  { name: 'Merica Bubuk Ladaku (Pack isi 6)', category: 'Bumbu & Dapur', unit: 'pack', lastPrice: 6000, lastDate: '2026-09-15' },
+
+  // --- DAGING, LAUK & PROTEIN ---
+  { name: 'Daging Ayam Potong 1kg', category: 'Daging & Telur', unit: 'kg', lastPrice: 36000, lastDate: '2026-09-15' },
+  { name: 'Fillet Dada Ayam 500g', category: 'Daging & Telur', unit: 'pack', lastPrice: 26500, lastDate: '2026-09-15' },
+  { name: 'Daging Sapi Giling 250g', category: 'Daging & Telur', unit: 'pack', lastPrice: 34000, lastDate: '2026-09-15' },
+  { name: 'Tempe Papan', category: 'Daging & Telur', unit: 'pcs', lastPrice: 5000, lastDate: '2026-09-15' },
+  { name: 'Tahu Putih 1 bungkus', category: 'Daging & Telur', unit: 'pack', lastPrice: 6000, lastDate: '2026-09-15' },
+  { name: 'Sosis Sapi Siap Makan (Isi 6)', category: 'Daging & Telur', unit: 'pack', lastPrice: 18000, lastDate: '2026-09-15' },
+  { name: 'Bakso Sapi 200g', category: 'Daging & Telur', unit: 'pack', lastPrice: 16000, lastDate: '2026-09-15' },
+  { name: 'Nugget Ayam 500g', category: 'Daging & Telur', unit: 'pack', lastPrice: 42000, lastDate: '2026-09-15' },
+  { name: 'Kornet Sapi 198g', category: 'Daging & Telur', unit: 'pcs', lastPrice: 24500, lastDate: '2026-09-15' },
+  { name: 'Sarden Saus Tomat 425g', category: 'Daging & Telur', unit: 'pcs', lastPrice: 23000, lastDate: '2026-09-15' },
+  { name: 'Ikan Kembung Segar 500g', category: 'Daging & Telur', unit: 'pack', lastPrice: 21000, lastDate: '2026-09-15' },
+
+  // --- SAYURAN SEGAR ---
+  { name: 'Kangkung Segar 1 ikat', category: 'Sembako', unit: 'pcs', lastPrice: 3000, lastDate: '2026-09-15' },
+  { name: 'Bayam Hijau 1 ikat', category: 'Sembako', unit: 'pcs', lastPrice: 3500, lastDate: '2026-09-15' },
+  { name: 'Sawi Hijau / Caisim 1 ikat', category: 'Sembako', unit: 'pcs', lastPrice: 4000, lastDate: '2026-09-15' },
+  { name: 'Wortel Lokal 500g', category: 'Sembako', unit: 'pack', lastPrice: 7000, lastDate: '2026-09-15' },
+  { name: 'Kentang Dieng 500g', category: 'Sembako', unit: 'pack', lastPrice: 9500, lastDate: '2026-09-15' },
+  { name: 'Tomat Sayur 500g', category: 'Sembako', unit: 'pack', lastPrice: 6500, lastDate: '2026-09-15' },
+  { name: 'Kol / Kubis 500g', category: 'Sembako', unit: 'pack', lastPrice: 5000, lastDate: '2026-09-15' },
+  { name: 'Daun Bawang & Seledri 1 ikat', category: 'Bumbu & Dapur', unit: 'pcs', lastPrice: 3000, lastDate: '2026-09-15' },
+
+  // --- MINUMAN & CAMILAN ---
+  { name: 'Susu UHT Full Cream 1L', category: 'Minuman', unit: 'liter', lastPrice: 18500, lastDate: '2026-09-15' },
+  { name: 'Kopi Kapal Api 1 renceng', category: 'Minuman', unit: 'pack', lastPrice: 13500, lastDate: '2026-09-15' },
+  { name: 'Teh Celup Kotak (Isi 25)', category: 'Minuman', unit: 'pack', lastPrice: 7500, lastDate: '2026-09-15' },
+  { name: 'Biskuit Roma Kelapa 300g', category: 'Camilan & Lainnya', unit: 'pack', lastPrice: 11500, lastDate: '2026-09-15' },
+  { name: 'Air Galon Isi Ulang', category: 'Minuman', unit: 'pcs', lastPrice: 6000, lastDate: '2026-09-15' },
+  { name: 'Galon Le Minerale 15L', category: 'Minuman', unit: 'pcs', lastPrice: 20000, lastDate: '2026-09-15' },
+
+  // --- PERLENGKAPAN MANDI & RUMAH (NON-MAKANAN) ---
+  { name: 'Sabun Mandi Refill 450ml', category: 'Perlengkapan Mandi', unit: 'pack', lastPrice: 22000, lastDate: '2026-09-15' },
+  { name: 'Pasta Gigi Herbal 190g', category: 'Perlengkapan Mandi', unit: 'pcs', lastPrice: 15500, lastDate: '2026-09-15' },
+  { name: 'Shampoo Anti Ketombe 160ml', category: 'Perlengkapan Mandi', unit: 'botol', lastPrice: 23500, lastDate: '2026-09-15' },
+  { name: 'Deterjen Cair 750ml', category: 'Perlengkapan Mandi', unit: 'pack', lastPrice: 19500, lastDate: '2026-09-15' },
+  { name: 'Sabun Cuci Piring 650ml', category: 'Perlengkapan Mandi', unit: 'pack', lastPrice: 13500, lastDate: '2026-09-15' }
 ];
 
 // Contoh riwayat bulan lalu siap pakai
 const DEFAULT_HISTORY = [
   {
     id: 'trip-september-2026',
-    date: '10 September 2026',
+    date: '15 September 2026',
     title: 'Belanja Bulanan Kos - September',
     budgetCap: 600000,
     totalSpent: 485000,
     totalSavings: 42500,
     itemsCount: 8,
     items: [
-      { name: 'Beras Ramos 5kg', qty: 1, unit: 'pack', unitPrice: 72000, netTotal: 72000, category: 'Sembako' },
-      { name: 'Minyak Goreng 2L', qty: 1, unit: 'liter', unitPrice: 34500, netTotal: 34500, category: 'Sembako' },
-      { name: 'Telur Ayam 1kg', qty: 2, unit: 'kg', unitPrice: 28000, netTotal: 56000, category: 'Daging & Telur' },
+      { name: 'Beras Ramos 5kg', qty: 1, unit: 'pack', unitPrice: 74000, netTotal: 74000, category: 'Sembako' },
+      { name: 'Minyak Goreng 2L', qty: 1, unit: 'liter', unitPrice: 35000, netTotal: 35000, category: 'Sembako' },
+      { name: 'Telur Ayam 1kg', qty: 2, unit: 'kg', unitPrice: 28500, netTotal: 57000, category: 'Daging & Telur' },
       { name: 'Indomie Goreng (Pack isi 5)', qty: 4, unit: 'pack', unitPrice: 15500, netTotal: 62000, category: 'Sembako' },
-      { name: 'Sabun Mandi Refill 450ml', qty: 2, unit: 'pack', unitPrice: 22500, netTotal: 45000, category: 'Perlengkapan Mandi' },
+      { name: 'Sabun Mandi Refill 450ml', qty: 2, unit: 'pack', unitPrice: 22000, netTotal: 44000, category: 'Perlengkapan Mandi' },
       { name: 'Deterjen Cair 750ml', qty: 2, unit: 'pack', unitPrice: 19500, netTotal: 39000, category: 'Perlengkapan Mandi' },
-      { name: 'Nugget Ayam 500g', qty: 2, unit: 'pack', unitPrice: 43000, netTotal: 86000, category: 'Daging & Telur' },
-      { name: 'Susu UHT Full Cream 1L', qty: 4, unit: 'liter', unitPrice: 19000, netTotal: 76000, category: 'Minuman' }
+      { name: 'Nugget Ayam 500g', qty: 2, unit: 'pack', unitPrice: 42000, netTotal: 84000, category: 'Daging & Telur' },
+      { name: 'Susu UHT Full Cream 1L', qty: 4, unit: 'liter', unitPrice: 18500, netTotal: 74000, category: 'Minuman' }
     ]
   }
 ];
@@ -52,9 +101,29 @@ const DEFAULT_HISTORY = [
 export const Store = {
   // Inisialisasi awal
   init() {
-    if (!localStorage.getItem(STORAGE_KEYS.BENCHMARKS)) {
+    const existingBenchmarks = localStorage.getItem(STORAGE_KEYS.BENCHMARKS);
+    if (!existingBenchmarks) {
       localStorage.setItem(STORAGE_KEYS.BENCHMARKS, JSON.stringify(DEFAULT_BENCHMARKS));
+    } else {
+      // Auto-merge produk baru jika belum ada di cache browser pengguna
+      try {
+        const parsed = JSON.parse(existingBenchmarks);
+        const nameSet = new Set(parsed.map(p => p.name.toLowerCase()));
+        let hasNew = false;
+        DEFAULT_BENCHMARKS.forEach(item => {
+          if (!nameSet.has(item.name.toLowerCase())) {
+            parsed.push(item);
+            hasNew = true;
+          }
+        });
+        if (hasNew) {
+          localStorage.setItem(STORAGE_KEYS.BENCHMARKS, JSON.stringify(parsed));
+        }
+      } catch {
+        localStorage.setItem(STORAGE_KEYS.BENCHMARKS, JSON.stringify(DEFAULT_BENCHMARKS));
+      }
     }
+
     if (!localStorage.getItem(STORAGE_KEYS.HISTORY)) {
       localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(DEFAULT_HISTORY));
     }

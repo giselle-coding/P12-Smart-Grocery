@@ -1,13 +1,21 @@
 /**
  * Smart Grocery & Budget Safety Tracker
- * Module: Store (State Management, Historical Benchmark & LocalStorage)
+ * Module: Store (State Management, Historical Benchmark, LocalStorage & Firestore Sync)
  */
+
+import { 
+  getLocalSessionMeta, 
+  saveLocalSessionMeta, 
+  pushSessionToFirestore, 
+  subscribeActiveSessionRealtime 
+} from './firebase-config.js';
 
 const STORAGE_KEYS = {
   CART: 'smart_grocery_cart_v1',
   HISTORY: 'smart_grocery_history_v1',
   BENCHMARKS: 'smart_grocery_benchmarks_v1',
-  SETTINGS: 'smart_grocery_settings_v1'
+  SETTINGS: 'smart_grocery_settings_v1',
+  SESSION_META: 'smart_grocery_session_meta_v1'
 };
 
 // Data benchmark acuan harga pasar & supermarket riil Indonesia
@@ -81,7 +89,10 @@ const DEFAULT_HISTORY = [
     id: 'trip-september-2026',
     date: '15 September 2026',
     title: 'Belanja Bulanan Kos - September',
+    storeLocation: 'Supermarket Superindo',
+    shoppingDate: '2026-09-15',
     budgetCap: 600000,
+    walletLimit: 600000,
     totalSpent: 485000,
     totalSavings: 42500,
     itemsCount: 8,
@@ -98,6 +109,9 @@ const DEFAULT_HISTORY = [
   }
 ];
 
+// Listener observer untuk notifikasi perubahan state secara realtime ke UI
+const stateChangeListeners = new Set();
+
 export const Store = {
   // Inisialisasi awal
   init() {
@@ -105,7 +119,6 @@ export const Store = {
     if (!existingBenchmarks) {
       localStorage.setItem(STORAGE_KEYS.BENCHMARKS, JSON.stringify(DEFAULT_BENCHMARKS));
     } else {
-      // Auto-merge produk baru jika belum ada di cache browser pengguna
       try {
         const parsed = JSON.parse(existingBenchmarks);
         const nameSet = new Set(parsed.map(p => p.name.toLowerCase()));
@@ -127,15 +140,23 @@ export const Store = {
     if (!localStorage.getItem(STORAGE_KEYS.HISTORY)) {
       localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(DEFAULT_HISTORY));
     }
+
     if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({
-        budgetCap: 600000, // Budget bulanan tipikal anak kos/rantau
+        budgetCap: 600000,
         soundEnabled: true,
         hapticEnabled: true
       }));
     }
+
+    if (!localStorage.getItem(STORAGE_KEYS.SESSION_META)) {
+      saveLocalSessionMeta({
+        storeLocation: 'Superindo Dago',
+        shoppingDate: new Date().toISOString().split('T')[0]
+      });
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.CART)) {
-      // Mulai dengan 2 item contoh di troli
       localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify([
         {
           id: 'item-demo-1',
@@ -143,7 +164,7 @@ export const Store = {
           category: 'Sembako',
           unit: 'liter',
           qty: 1,
-          unitPrice: 32000, // Bulan lalu 34.500 (Turun!)
+          unitPrice: 32000,
           discountInput: '10',
           grossTotal: 32000,
           netTotal: 28800,
@@ -157,7 +178,7 @@ export const Store = {
           category: 'Daging & Telur',
           unit: 'kg',
           qty: 1.5,
-          unitPrice: 30000, // Bulan lalu 28.000 (Naik!)
+          unitPrice: 30000,
           discountInput: '',
           grossTotal: 45000,
           netTotal: 45000,
@@ -167,6 +188,112 @@ export const Store = {
         }
       ]));
     }
+  },
+
+  // Langganan UI terhadap perubahan state (Realtime Observer)
+  subscribe(callback) {
+    if (typeof callback === 'function') {
+      stateChangeListeners.add(callback);
+      return () => stateChangeListeners.delete(callback);
+    }
+    return () => {};
+  },
+
+  notifyListeners(source = 'local') {
+    stateChangeListeners.forEach(fn => {
+      try {
+        fn(source);
+      } catch (e) {
+        console.error('Error on state listener:', e);
+      }
+    });
+  },
+
+  // ================= Variabel Sesi Belanja Wajib =================
+  // storeLocation, shoppingDate, walletLimit, items, totalSpent, totalSavings
+  getSessionData() {
+    const meta = getLocalSessionMeta();
+    const settings = this.getSettings();
+    const cart = this.getCart();
+
+    const totalSpent = cart.reduce((acc, item) => acc + (Number(item.netTotal) || 0), 0);
+    const totalSavings = cart.reduce((acc, item) => acc + (Number(item.totalSavings) || 0), 0);
+
+    return {
+      storeLocation: meta.storeLocation || 'Supermarket Utama',
+      shoppingDate: meta.shoppingDate || new Date().toISOString().split('T')[0],
+      walletLimit: Number(settings.budgetCap) || 600000,
+      items: cart,
+      totalSpent,
+      totalSavings
+    };
+  },
+
+  // Kirim data ke Cloud Firestore & simpan ke LocalStorage
+  syncToCloud() {
+    const session = this.getSessionData();
+    pushSessionToFirestore(session);
+    this.notifyListeners('local');
+  },
+
+  // Menerima update snapshot realtime dari Firestore (onSnapshot)
+  applyRemoteSession(remoteData) {
+    if (!remoteData) {
+      // Jika dokumen remote baru diinisialisasi
+      this.syncToCloud();
+      return;
+    }
+
+    let changed = false;
+
+    // 1. Items
+    if (Array.isArray(remoteData.items)) {
+      localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(remoteData.items));
+      changed = true;
+    }
+
+    // 2. Wallet Limit / Budget Cap
+    if (typeof remoteData.walletLimit !== 'undefined') {
+      const currentSettings = this.getSettings();
+      if (currentSettings.budgetCap !== remoteData.walletLimit) {
+        currentSettings.budgetCap = Number(remoteData.walletLimit);
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(currentSettings));
+        changed = true;
+      }
+    }
+
+    // 3. Store Location & Shopping Date
+    if (remoteData.storeLocation || remoteData.shoppingDate) {
+      saveLocalSessionMeta({
+        storeLocation: remoteData.storeLocation,
+        shoppingDate: remoteData.shoppingDate
+      });
+      changed = true;
+    }
+
+    if (changed) {
+      this.notifyListeners('remote');
+    }
+  },
+
+  // Set Lokasi Toko
+  setStoreLocation(location) {
+    saveLocalSessionMeta({ storeLocation: location });
+    this.syncToCloud();
+  },
+
+  getStoreLocation() {
+    return getLocalSessionMeta().storeLocation || 'Supermarket Utama';
+  },
+
+  // Set Tanggal Belanja
+  setShoppingDate(date) {
+    saveLocalSessionMeta({ shoppingDate: date });
+    this.syncToCloud();
+  },
+
+  getShoppingDate() {
+    return getLocalSessionMeta().shoppingDate || new Date().toISOString().split('T')[0];
   },
 
   // Operasi Troli (Cart)
@@ -180,6 +307,7 @@ export const Store = {
 
   saveCart(cart) {
     localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart));
+    this.syncToCloud();
   },
 
   addItem(item) {
@@ -214,7 +342,7 @@ export const Store = {
     this.saveCart([]);
   },
 
-  // Settings & Budget Cap
+  // Settings & Budget Cap / Wallet Limit
   getSettings() {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS)) || { budgetCap: 600000 };
@@ -227,6 +355,7 @@ export const Store = {
     const current = this.getSettings();
     const updated = { ...current, ...newSettings };
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+    this.syncToCloud();
     return updated;
   },
 
@@ -286,12 +415,9 @@ export const Store = {
   },
 
   checkoutCart(tripTitle = '') {
-    const cart = this.getCart();
+    const session = this.getSessionData();
+    const cart = session.items;
     if (cart.length === 0) return null;
-
-    const settings = this.getSettings();
-    const totalSpent = cart.reduce((acc, item) => acc + item.netTotal, 0);
-    const totalSavings = cart.reduce((acc, item) => acc + (item.totalSavings || 0), 0);
 
     const now = new Date();
     const dateStr = now.toLocaleDateString('id-ID', {
@@ -304,15 +430,18 @@ export const Store = {
       id: 'trip_' + Date.now(),
       date: dateStr,
       timestamp: now.getTime(),
-      title: tripTitle || `Belanja Bulanan (${dateStr})`,
-      budgetCap: settings.budgetCap,
-      totalSpent,
-      totalSavings,
+      title: tripTitle || `Belanja di ${session.storeLocation} (${dateStr})`,
+      storeLocation: session.storeLocation,
+      shoppingDate: session.shoppingDate,
+      walletLimit: session.walletLimit,
+      budgetCap: session.walletLimit,
+      totalSpent: session.totalSpent,
+      totalSavings: session.totalSavings,
       itemsCount: cart.length,
       items: [...cart]
     };
 
-    // Update benchmarks untuk komparasi bulan selanjutnya! (F-06 -> basis data pembanding)
+    // Update benchmarks untuk komparasi bulan selanjutnya!
     cart.forEach(item => {
       this.saveBenchmark(item.name, item.category, item.unit, item.unitPrice);
     });
@@ -322,7 +451,7 @@ export const Store = {
     history.unshift(newTrip);
     localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
 
-    // Kosongkan keranjang aktif
+    // Kosongkan keranjang aktif & sinkronisasi
     this.clearCart();
 
     return newTrip;
@@ -340,6 +469,8 @@ export const Store = {
     localStorage.removeItem(STORAGE_KEYS.HISTORY);
     localStorage.removeItem(STORAGE_KEYS.BENCHMARKS);
     localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+    localStorage.removeItem(STORAGE_KEYS.SESSION_META);
     this.init();
+    this.syncToCloud();
   }
 };

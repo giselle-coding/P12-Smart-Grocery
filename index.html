@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#10B981">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="PWA Smart Grocery & Budget Safety Tracker bergaya native app untuk siswa rantau.">
-  <title>Smart Grocery - Budget Safety Tracker</title>
+  <meta name="description" content="PWA Smart Grocery & Budget Safety Tracker bergaya native app untuk siswa rantau dengan sinkronisasi Realtime Cloud Firestore Multi-Device.">
+  <title>Smart Grocery - Budget Safety Tracker (Realtime Sync)</title>
   
   <link rel="manifest" href="./manifest.json">
   <!-- Tailwind CSS CDN -->
@@ -47,7 +47,7 @@
         <div>
           <div class="flex items-center gap-1.5">
             <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">Smart Grocery</h1>
-            <span class="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-1.5 py-0.5 rounded-full border border-emerald-500/30">Rantau</span>
+            <span class="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-1.5 py-0.5 rounded-full border border-emerald-500/30">Realtime</span>
           </div>
           <p class="text-[11px] text-slate-400 font-medium">Budget Safety Tracker</p>
         </div>
@@ -68,8 +68,45 @@
     <!-- Main Content Area -->
     <main class="flex-1 px-4 pt-3 pb-8 overflow-y-auto">
 
+      <!-- ================= REALTIME MULTI-DEVICE STATUS BAR ================= -->
+      <div id="realtimeStatusBar" class="mb-3 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2">
+          <span class="relative flex h-2.5 w-2.5">
+            <span id="syncPulsePing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span id="syncStatusDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span id="syncStatusText" class="font-bold text-emerald-400">Realtime HP ⇆ PC Aktif</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+          <i data-lucide="smartphone" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span id="activeUserBadge" class="font-medium text-slate-300">Akun: admin</span>
+        </div>
+      </div>
+
       <!-- ================= TAB 1: BELANJA / TROLI AKTIF ================= -->
       <section id="tab-belanja" class="tab-page block">
+
+        <!-- Info Sesi Belanja (storeLocation & shoppingDate) -->
+        <div class="mb-3 p-3 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-850 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] flex items-center gap-1">
+              <i data-lucide="map-pin" class="w-3 h-3 text-emerald-400"></i>
+              Lokasi Supermarket / Toko
+            </span>
+            <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] flex items-center gap-1">
+              <i data-lucide="calendar" class="w-3 h-3 text-emerald-400"></i>
+              Tanggal Belanja
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="relative">
+              <input type="text" id="inputStoreLocation" value="Superindo Dago" placeholder="Nama Toko..." class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none font-bold placeholder-slate-600 transition" title="Ketik untuk mengubah lokasi toko, otomatis sync ke PC">
+            </div>
+            <div class="relative">
+              <input type="date" id="inputShoppingDate" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none font-bold transition" title="Pilih tanggal belanja">
+            </div>
+          </div>
+        </div>
 
         <!-- F-05: Safety Cap / Pengendali Anggaran Card -->
         <div id="budgetSafetyCard" class="budget-card status-safe">
@@ -77,7 +114,7 @@
             <div>
               <span class="text-[11px] font-bold text-slate-400 tracking-wider uppercase flex items-center gap-1">
                 <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                Safety Cap Dompet
+                Safety Cap Dompet (Limit)
               </span>
               <div class="flex items-baseline gap-2 mt-0.5">
                 <span id="displayBudgetCap" class="text-xl font-black text-white">Rp 600.000</span>
@@ -232,15 +269,43 @@
       <!-- ================= TAB 3: ANGGARAN & KALKULATOR DISKON ================= -->
       <section id="tab-anggaran" class="tab-page hidden">
         <div class="mb-4">
-          <h2 class="text-lg font-black text-white tracking-tight">Anggaran & Fitur Cerdas</h2>
-          <p class="text-xs text-slate-400">Pengendali batas dompet dan kalkulator diskon bertingkat.</p>
+          <h2 class="text-lg font-black text-white tracking-tight">Anggaran & Multi-Device</h2>
+          <p class="text-xs text-slate-400">Sinkronisasi Realtime Cloud Firestore, batas dompet & simulator diskon.</p>
+        </div>
+
+        <!-- Kartu Manajemen Akun Bersama & Sesi Realtime -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="users" class="w-5 h-5 text-emerald-400"></i>
+              <h3 class="text-sm font-bold text-white">Akun Realtime Multi-Device</h3>
+            </div>
+            <span id="tabAccountStatusBadge" class="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">Terhubung</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">
+            Satu akun bersama ini menghubungkan HP di supermarket dan PC di rumah secara serentak melalui Cloud Firestore realtime <code class="text-emerald-400 font-mono">onSnapshot()</code>.
+          </p>
+          <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 mb-3 flex items-center justify-between text-xs">
+            <div>
+              <span class="text-slate-500 block text-[10px] uppercase font-bold">Pengguna Aktif:</span>
+              <strong id="displayAuthUsername" class="text-white text-sm font-black">admin</strong>
+            </div>
+            <button id="btnLogout" class="px-3 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30 text-xs font-bold rounded-xl active:scale-95 transition flex items-center gap-1">
+              <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+              Keluar
+            </button>
+          </div>
+          <button id="btnManualSync" class="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl active:scale-95 transition flex items-center justify-center gap-2">
+            <i data-lucide="refresh-cw" class="w-4 h-4 text-emerald-400"></i>
+            <span>Sinkronkan Ulang ke Cloud Sekarang</span>
+          </button>
         </div>
 
         <!-- Pengaturan Safety Cap Dompet -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-4">
           <div class="flex items-center gap-2 mb-2">
             <i data-lucide="wallet" class="w-5 h-5 text-emerald-400"></i>
-            <h3 class="text-sm font-bold text-white">Batas Safety Cap (Limit Bulanan)</h3>
+            <h3 class="text-sm font-bold text-white">Batas Safety Cap (Wallet Limit)</h3>
           </div>
           <p class="text-xs text-slate-400 mb-3">
             Batas belanja maksimal dalam sekali jalan agar tidak membobol uang bulanan kiriman orang tua.
@@ -489,6 +554,10 @@
         <div class="space-y-4">
           <div class="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
             <div class="flex justify-between text-xs text-slate-400">
+              <span>Lokasi Toko:</span>
+              <span id="chkModalStore" class="font-bold text-white">Superindo Dago</span>
+            </div>
+            <div class="flex justify-between text-xs text-slate-400">
               <span>Batas Safety Cap:</span>
               <span id="chkModalBudget" class="font-bold text-white">Rp 600.000</span>
             </div>
@@ -604,6 +673,56 @@
 
     <!-- Toast Alert Container -->
     <div id="toastContainer" class="toast-container"></div>
+
+    <!-- ================= MODAL LOGIN MULTI-DEVICE (1 AKUN UNTUK SEMUA AKSES) ================= -->
+    <div id="loginOverlay" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300 hidden">
+      <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+        <div class="text-center space-y-2">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/30">
+            <i data-lucide="shopping-cart" class="w-7 h-7 text-slate-950"></i>
+          </div>
+          <h2 class="text-xl font-black text-white">Smart Grocery</h2>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Masuk ke akun bersama untuk sinkronisasi belanja realtime multi-device (HP & PC).
+          </p>
+        </div>
+
+        <!-- Petunjuk Akun Bersama -->
+        <div class="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-start gap-2">
+          <i data-lucide="info" class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5"></i>
+          <span>
+            <strong>1 Akun untuk Semua Perangkat:</strong> Masukkan username & password bebas (tanpa verifikasi). Buka di HP & PC bersamaan!
+          </span>
+        </div>
+
+        <form id="loginForm" class="space-y-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1" for="loginUsername">Username</label>
+            <div class="relative">
+              <i data-lucide="user" class="w-4 h-4 text-slate-500 absolute left-3 top-3"></i>
+              <input type="text" id="loginUsername" value="admin" required placeholder="Contoh: admin atau nama kamu" class="large-input pl-9 text-sm">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1" for="loginPassword">Password</label>
+            <div class="relative">
+              <i data-lucide="lock" class="w-4 h-4 text-slate-500 absolute left-3 top-3"></i>
+              <input type="password" id="loginPassword" value="admin" required placeholder="Masukkan password bebas" class="large-input pl-9 text-sm">
+            </div>
+          </div>
+
+          <button type="submit" id="btnLoginSubmit" class="thumb-btn-primary mt-2">
+            <i data-lucide="log-in" class="w-5 h-5"></i>
+            <span>Masuk ke Sesi Realtime</span>
+          </button>
+        </form>
+
+        <p class="text-[11px] text-center text-slate-500">
+          Data offline tetap otomatis aman di LocalStorage (Anti hilang saat tekan F5).
+        </p>
+      </div>
+    </div>
 
   </div>
 

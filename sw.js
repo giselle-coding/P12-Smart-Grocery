@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-grocery-v3';
+const CACHE_NAME = 'smart-grocery-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS_TO_CACHE = [
   './js/calculator.js',
   './js/store.js',
   './js/recipes.js',
+  './js/firebase-config.js',
   './js/app.js'
 ];
 
@@ -29,8 +30,15 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Stale-while-revalidate for local assets, network-first for external CDN
+  // Hanya tangani GET requests
   if (event.request.method !== 'GET') return;
+
+  // Jangan tangani atau cache request firestore / gstatic dari service worker agar realtime long-polling / webchannel lancar
+  const url = event.request.url;
+  if (url.includes('firestore.googleapis.com') || url.includes('firebaseinstallations.googleapis.com')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {

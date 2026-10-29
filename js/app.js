@@ -1,11 +1,18 @@
 /**
  * Smart Grocery & Budget Safety Tracker
- * Main Controller: UI Rendering, Interactions, Modals & PWA
+ * Main Controller: UI Rendering, Interactions, Modals, PWA & Realtime Cloud Sync
  */
 
 import { Store } from './store.js';
 import { Calculator } from './calculator.js';
 import { RECIPES_DATA, matchRecipesWithItems, isFoodItem } from './recipes.js';
+import { 
+  getAuthUser, 
+  loginUser, 
+  logoutUser, 
+  subscribeActiveSessionRealtime, 
+  pushSessionToFirestore 
+} from './firebase-config.js';
 
 // Sound & Haptic FX via Web Audio API
 class AudioFeedback {
@@ -70,6 +77,7 @@ const sound = new AudioFeedback();
 // Application State
 let activeCategoryFilter = 'ALL';
 let currentEditingItemId = null;
+let realtimeUnsubscribe = null;
 
 // DOM Elements Cache
 const DOM = {
@@ -78,6 +86,15 @@ const DOM = {
   tabPages: document.querySelectorAll('.tab-page'),
   navCartBadge: document.getElementById('navCartBadge'),
   btnSoundToggle: document.getElementById('btnSoundToggle'),
+
+  // Realtime Status Bar & Sesi Belanja
+  realtimeStatusBar: document.getElementById('realtimeStatusBar'),
+  syncPulsePing: document.getElementById('syncPulsePing'),
+  syncStatusDot: document.getElementById('syncStatusDot'),
+  syncStatusText: document.getElementById('syncStatusText'),
+  activeUserBadge: document.getElementById('activeUserBadge'),
+  inputStoreLocation: document.getElementById('inputStoreLocation'),
+  inputShoppingDate: document.getElementById('inputShoppingDate'),
 
   // Budget Card Elements
   budgetSafetyCard: document.getElementById('budgetSafetyCard'),
@@ -126,6 +143,7 @@ const DOM = {
   checkoutModalOverlay: document.getElementById('checkoutModalOverlay'),
   btnOpenCheckoutModal: document.getElementById('btnOpenCheckoutModal'),
   btnCloseCheckoutModal: document.getElementById('btnCloseCheckoutModal'),
+  chkModalStore: document.getElementById('chkModalStore'),
   chkModalBudget: document.getElementById('chkModalBudget'),
   chkModalTotal: document.getElementById('chkModalTotal'),
   chkModalSavings: document.getElementById('chkModalSavings'),
@@ -152,11 +170,19 @@ const DOM = {
   btnSaveSettingBudget: document.getElementById('btnSaveSettingBudget'),
   btnResetAllData: document.getElementById('btnResetAllData'),
 
+  // Akun & Multi-Device Card Elements
+  tabAccountStatusBadge: document.getElementById('tabAccountStatusBadge'),
+  displayAuthUsername: document.getElementById('displayAuthUsername'),
+  btnLogout: document.getElementById('btnLogout'),
+  btnManualSync: document.getElementById('btnManualSync'),
+
   // Simulator Elements
   simPrice: document.getElementById('simPrice'),
   simDiscount: document.getElementById('simDiscount'),
   simGrossResult: document.getElementById('simGrossResult'),
   simSavedResult: document.getElementById('simSavedResult'),
+  simNetResult: document.getElementById('simNetResult'),
+
   // Recipe Ideas Elements
   btnOpenRecipesModal: document.getElementById('btnOpenRecipesModal'),
   recipesModalOverlay: document.getElementById('recipesModalOverlay'),
@@ -167,6 +193,12 @@ const DOM = {
   recipeSourceAll: document.getElementById('recipeSourceAll'),
   detectedFoodStrip: document.getElementById('detectedFoodStrip'),
   recipesListContainer: document.getElementById('recipesListContainer'),
+
+  // Login Modal
+  loginOverlay: document.getElementById('loginOverlay'),
+  loginForm: document.getElementById('loginForm'),
+  loginUsername: document.getElementById('loginUsername'),
+  loginPassword: document.getElementById('loginPassword'),
 
   toastContainer: document.getElementById('toastContainer')
 };
@@ -240,10 +272,49 @@ function setupTabs() {
   });
 }
 
+// ================= Sinkronisasi Status Visual Koneksi Cloud =================
+function updateConnectionUI(status, message) {
+  if (!DOM.syncStatusDot || !DOM.syncStatusText) return;
+
+  if (status === 'online') {
+    DOM.syncStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500';
+    if (DOM.syncPulsePing) DOM.syncPulsePing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+    DOM.syncStatusText.className = 'font-bold text-emerald-400';
+    DOM.syncStatusText.textContent = 'Realtime HP ⇆ PC Aktif';
+    if (DOM.tabAccountStatusBadge) {
+      DOM.tabAccountStatusBadge.className = 'text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30';
+      DOM.tabAccountStatusBadge.textContent = 'Terhubung Realtime';
+    }
+  } else if (status === 'syncing') {
+    DOM.syncStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400';
+    if (DOM.syncPulsePing) DOM.syncPulsePing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
+    DOM.syncStatusText.className = 'font-bold text-amber-400';
+    DOM.syncStatusText.textContent = 'Menyimpan ke Cloud...';
+  } else {
+    // Offline / fallback LocalStorage
+    DOM.syncStatusDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-500';
+    if (DOM.syncPulsePing) DOM.syncPulsePing.className = 'hidden';
+    DOM.syncStatusText.className = 'font-semibold text-slate-400';
+    DOM.syncStatusText.textContent = 'Mode Lokal (Tersimpan di HP)';
+    if (DOM.tabAccountStatusBadge) {
+      DOM.tabAccountStatusBadge.className = 'text-[10px] bg-slate-800 text-slate-400 font-bold px-2 py-0.5 rounded-full border border-slate-700';
+      DOM.tabAccountStatusBadge.textContent = 'Offline (LocalStorage)';
+    }
+  }
+}
+
 // ================= Render Cart & Budget Safety (F-01 to F-05) =================
 function renderCart() {
   const cart = Store.getCart();
   const settings = Store.getSettings();
+
+  // Sinkronkan input sesi belanja jika tidak sedang aktif diketik pengguna
+  if (DOM.inputStoreLocation && document.activeElement !== DOM.inputStoreLocation) {
+    DOM.inputStoreLocation.value = Store.getStoreLocation();
+  }
+  if (DOM.inputShoppingDate && document.activeElement !== DOM.inputShoppingDate) {
+    DOM.inputShoppingDate.value = Store.getShoppingDate();
+  }
 
   // Filter items by category
   const filteredCart = activeCategoryFilter === 'ALL'
@@ -251,8 +322,8 @@ function renderCart() {
     : cart.filter(item => item.category === activeCategoryFilter);
 
   // Compute Totals
-  const totalSpent = cart.reduce((sum, item) => sum + item.netTotal, 0);
-  const totalSavings = cart.reduce((sum, item) => sum + (item.totalSavings || 0), 0);
+  const totalSpent = cart.reduce((sum, item) => sum + (Number(item.netTotal) || 0), 0);
+  const totalSavings = cart.reduce((sum, item) => sum + (Number(item.totalSavings) || 0), 0);
 
   // Nav badge & counts
   DOM.navCartBadge.textContent = cart.length;
@@ -266,7 +337,7 @@ function renderCart() {
     DOM.cartTotalSavingsBadge.classList.add('hidden');
   }
 
-  // F-05: Evaluate Budget
+  // F-05: Evaluate Budget Safety Cap
   const budgetEval = Calculator.evaluateBudget(totalSpent, settings.budgetCap);
   DOM.displayBudgetCap.textContent = Calculator.formatRupiah(settings.budgetCap);
   DOM.displayCurrentTotal.textContent = Calculator.formatRupiah(totalSpent);
@@ -313,13 +384,11 @@ function renderCart() {
       // F-04: Komparator Harga vs Bulan Lalu
       const comparison = Calculator.comparePrice(item.unitPrice, item.lastMonthPrice);
 
-      // Icon Lucide for comparison
       let compIconName = 'sparkles';
       if (comparison.status === 'UP') compIconName = 'arrow-up-right';
       if (comparison.status === 'DOWN') compIconName = 'arrow-down-right';
       if (comparison.status === 'EQUAL') compIconName = 'equal';
 
-      // Discount info badge
       const discountBadgeHtml = item.discountInput
         ? `<span class="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-black px-1.5 py-0.5 rounded-md">
              Disc ${item.discountInput}% (${Calculator.formatRupiah(item.totalSavings)})
@@ -329,7 +398,7 @@ function renderCart() {
       return `
         <div class="grocery-item-card" data-id="${item.id}">
           <div class="flex items-start justify-between gap-2">
-            <div class="flex-1">
+            <div class="flex-1 cursor-pointer btn-edit-item" data-id="${item.id}" title="Klik untuk edit barang">
               <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="text-xs text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">
                   ${item.category}
@@ -379,7 +448,7 @@ function renderCart() {
     }).join('');
   }
 
-  // Bind cart interactive actions
+  // Bind interactive actions
   bindCartEvents();
   updateRecipeBadge();
   refreshIcons();
@@ -452,6 +521,18 @@ function bindCartEvents() {
       }
     };
   });
+
+  // Edit item upon clicking card
+  document.querySelectorAll('.btn-edit-item').forEach(card => {
+    card.onclick = () => {
+      const id = card.getAttribute('data-id');
+      const cart = Store.getCart();
+      const item = cart.find(i => i.id === id);
+      if (item) {
+        openItemModal(item);
+      }
+    };
+  });
 }
 
 // ================= Live Modal Form Calculations (F-01, F-02, F-03, F-04) =================
@@ -518,7 +599,6 @@ function openItemModal(itemToEdit = null) {
     DOM.inputItemCategory.value = 'Sembako';
   }
 
-  // Highlight active chips
   updateModalChips();
   updateModalCalculations();
   DOM.itemModalOverlay.classList.add('active');
@@ -543,7 +623,6 @@ function updateModalChips() {
 
 // Setup Form Listeners
 function setupFormListeners() {
-  // Autocomplete change
   DOM.inputItemName.addEventListener('input', () => {
     const val = DOM.inputItemName.value;
     const match = Store.findBenchmark(val);
@@ -560,7 +639,6 @@ function setupFormListeners() {
   DOM.inputItemQty.addEventListener('input', updateModalCalculations);
   DOM.inputItemDiscount.addEventListener('input', updateModalCalculations);
 
-  // Stepper buttons in modal
   DOM.btnModalQtyPlus.onclick = () => {
     sound.playClick();
     const cur = parseFloat(DOM.inputItemQty.value) || 0;
@@ -587,7 +665,6 @@ function setupFormListeners() {
     }
   };
 
-  // Category picker chips
   document.querySelectorAll('.cat-pick').forEach(btn => {
     btn.onclick = () => {
       sound.playClick();
@@ -596,7 +673,6 @@ function setupFormListeners() {
     };
   });
 
-  // Unit picker chips
   document.querySelectorAll('.unit-pick').forEach(btn => {
     btn.onclick = () => {
       sound.playClick();
@@ -604,18 +680,15 @@ function setupFormListeners() {
       DOM.inputItemUnit.value = newUnit;
       updateModalChips();
 
-      // Sesuaikan kuantitas agar realistis di dunia nyata
       const isWeight = newUnit === 'kg' || newUnit === 'liter';
       const cur = parseFloat(DOM.inputItemQty.value) || 1;
       if (!isWeight) {
-        // Untuk pcs, pack, botol -> harus bilangan bulat (1, 2, 3...)
         DOM.inputItemQty.value = Math.max(1, Math.round(cur));
       }
       updateModalCalculations();
     };
   });
 
-  // Preset discount pills in modal
   document.querySelectorAll('.btn-item-disc-preset').forEach(btn => {
     btn.onclick = () => {
       sound.playClick();
@@ -624,7 +697,6 @@ function setupFormListeners() {
     };
   });
 
-  // Form Submit (F-01 Save to Active Cart)
   DOM.itemForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const name = DOM.inputItemName.value.trim();
@@ -658,7 +730,7 @@ function setupFormListeners() {
 
     if (currentEditingItemId) {
       Store.updateItem(currentEditingItemId, itemData);
-      showToast(`Item "${name}" berhasil diubah!`, 'check');
+      showToast(`"${name}" berhasil diubah!`, 'check');
     } else {
       Store.addItem(itemData);
       showToast(`"${name}" masuk ke troli!`, 'shopping-cart');
@@ -668,7 +740,6 @@ function setupFormListeners() {
     closeItemModal();
     renderCart();
 
-    // Check budget cap breached notification
     const settings = Store.getSettings();
     const totalSpent = Store.getCart().reduce((sum, i) => sum + i.netTotal, 0);
     if (totalSpent > settings.budgetCap) {
@@ -681,6 +752,23 @@ function setupFormListeners() {
   DOM.btnQuickAddHeader.onclick = () => openItemModal();
   DOM.btnEmptyAdd.onclick = () => openItemModal();
   DOM.btnCloseItemModal.onclick = closeItemModal;
+
+  // Listeners untuk Sesi Belanja: storeLocation & shoppingDate
+  if (DOM.inputStoreLocation) {
+    DOM.inputStoreLocation.addEventListener('change', () => {
+      const loc = DOM.inputStoreLocation.value.trim() || 'Supermarket Utama';
+      Store.setStoreLocation(loc);
+      showToast(`Lokasi toko: "${loc}" disinkronkan`, 'map-pin');
+    });
+  }
+
+  if (DOM.inputShoppingDate) {
+    DOM.inputShoppingDate.addEventListener('change', () => {
+      const dt = DOM.inputShoppingDate.value;
+      Store.setShoppingDate(dt);
+      showToast(`Tanggal belanja disinkronkan`, 'calendar');
+    });
+  }
 }
 
 // ================= Checkout Modal (F-06 Selesaikan Belanja) =================
@@ -690,11 +778,15 @@ function setupCheckoutModal() {
     const cart = Store.getCart();
     if (cart.length === 0) return;
 
+    const session = Store.getSessionData();
     const settings = Store.getSettings();
-    const totalSpent = cart.reduce((s, i) => s + i.netTotal, 0);
-    const totalSavings = cart.reduce((s, i) => s + (i.totalSavings || 0), 0);
+    const totalSpent = session.totalSpent;
+    const totalSavings = session.totalSavings;
     const remaining = settings.budgetCap - totalSpent;
 
+    if (DOM.chkModalStore) {
+      DOM.chkModalStore.textContent = session.storeLocation;
+    }
     DOM.chkModalBudget.textContent = Calculator.formatRupiah(settings.budgetCap);
     DOM.chkModalTotal.textContent = Calculator.formatRupiah(totalSpent);
     DOM.chkModalSavings.textContent = `Hemat ${Calculator.formatRupiah(totalSavings)}`;
@@ -704,7 +796,7 @@ function setupCheckoutModal() {
     DOM.chkModalRemaining.className = remaining >= 0 ? 'text-emerald-400 font-black' : 'text-rose-400 font-black';
 
     const monthName = new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-    DOM.inputCheckoutTitle.value = `Belanja Bulanan Kos - ${monthName}`;
+    DOM.inputCheckoutTitle.value = `Belanja di ${session.storeLocation} - ${monthName}`;
 
     DOM.checkoutModalOverlay.classList.add('active');
   };
@@ -722,7 +814,6 @@ function setupCheckoutModal() {
       showToast('Belanja selesai & tersimpan di Riwayat!', 'check-circle');
       renderCart();
 
-      // Switch to Riwayat tab to view saved trip
       const riwayatTabBtn = document.querySelector('[data-tab="tab-riwayat"]');
       if (riwayatTabBtn) riwayatTabBtn.click();
     }
@@ -759,7 +850,6 @@ function setupBudgetControls() {
     }
   };
 
-  // Setting tab input budget
   const settings = Store.getSettings();
   DOM.inputSettingBudget.value = settings.budgetCap;
 
@@ -778,7 +868,6 @@ function setupBudgetControls() {
     };
   });
 
-  // Sound toggle button
   DOM.btnSoundToggle.onclick = () => {
     sound.enabled = !sound.enabled;
     if (sound.enabled) {
@@ -792,7 +881,6 @@ function setupBudgetControls() {
     refreshIcons();
   };
 
-  // Reset demo data
   DOM.btnResetAllData.onclick = () => {
     if (confirm('Kembalikan semua data ke setelan awal demo?')) {
       Store.resetData();
@@ -802,6 +890,15 @@ function setupBudgetControls() {
       renderBenchmarks();
     }
   };
+
+  // Manual Cloud Sync button
+  if (DOM.btnManualSync) {
+    DOM.btnManualSync.onclick = () => {
+      sound.playClick();
+      Store.syncToCloud();
+      showToast('Sinkronisasi paksa ke Cloud terkirim!', 'refresh-cw');
+    };
+  }
 }
 
 // ================= Render History & Benchmarks (F-06) =================
@@ -820,7 +917,7 @@ function renderHistory() {
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 transition">
           <div class="flex justify-between items-start mb-2">
             <div>
-              <span class="text-[10px] text-slate-400 font-semibold block">${trip.date}</span>
+              <span class="text-[10px] text-slate-400 font-semibold block">${trip.date} • ${trip.storeLocation || 'Supermarket'}</span>
               <h4 class="text-sm font-bold text-white">${trip.title}</h4>
             </div>
             <span class="text-xs font-black text-emerald-400 bg-emerald-950/70 border border-emerald-500/20 px-2 py-0.5 rounded-lg">
@@ -895,7 +992,6 @@ function renderBenchmarks() {
   }
 }
 
-// Setup Benchmark Search
 DOM.inputSearchBenchmark.addEventListener('input', renderBenchmarks);
 
 // ================= F-03 Simulator Tab Interactivity =================
@@ -965,18 +1061,15 @@ function renderRecipes() {
   if (currentRecipeSource === 'CART') {
     sourceItems = Store.getCart();
   } else {
-    // Gabungan troli + riwayat belanja sebelumnya
     const cart = Store.getCart();
     const history = Store.getHistory();
     const historyItems = history.flatMap(trip => trip.items || []);
     sourceItems = [...cart, ...historyItems];
   }
 
-  // Filter KHUSUS MAKANAN saja (Mengabaikan barang mandi/deterjen dll)
   const foodItems = sourceItems.filter(isFoodItem);
   const distinctFoodNames = Array.from(new Set(foodItems.map(i => i.name.trim())));
 
-  // Render Detected Food Strip
   if (!DOM.detectedFoodStrip) return;
 
   if (distinctFoodNames.length === 0) {
@@ -1006,7 +1099,6 @@ function renderRecipes() {
     `;
   }
 
-  // Match Recipes
   const matched = matchRecipesWithItems(sourceItems);
 
   if (!DOM.recipesListContainer) return;
@@ -1140,6 +1232,81 @@ function setupRecipesModule() {
   }
 }
 
+// ================= Realtime Multi-Device Sync (PENTING: onSnapshot Listener) =================
+function startRealtimeSync() {
+  updateConnectionUI('syncing', 'Menghubungkan ke Cloud Firestore...');
+
+  // PENTING: Gunakan onSnapshot realtime listener, BUKAN getDoc/getDocs sekali baca
+  realtimeUnsubscribe = subscribeActiveSessionRealtime(
+    (remoteData, meta) => {
+      if (remoteData) {
+        // Terapkan data dari server ke Store & LocalStorage
+        Store.applyRemoteSession(remoteData);
+        // Render ulang keranjang & perhitungan
+        renderCart();
+      } else if (meta?.isInitial) {
+        // Belum ada sesi di cloud, inisialisasi awal dari lokal
+        Store.syncToCloud();
+      }
+    },
+    (status, msg) => {
+      updateConnectionUI(status, msg);
+    }
+  );
+}
+
+// ================= Login 1 Akun untuk Semua Akses (Realtime Base, Tanpa Refresh) =================
+function setupAuth() {
+  const user = getAuthUser();
+
+  if (user) {
+    // Pengguna sudah login sebelumnya (tersimpan di LocalStorage)
+    DOM.loginOverlay.classList.add('hidden');
+    if (DOM.activeUserBadge) DOM.activeUserBadge.textContent = `Akun: ${user.username}`;
+    if (DOM.displayAuthUsername) DOM.displayAuthUsername.textContent = user.username;
+    startRealtimeSync();
+  } else {
+    // Tampilkan modal login tanpa reload
+    DOM.loginOverlay.classList.remove('hidden');
+  }
+
+  // Handle Submit Login (Realtime Base, Tidak Refresh / e.preventDefault)
+  DOM.loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = DOM.loginUsername.value.trim() || 'admin';
+    const password = DOM.loginPassword.value.trim();
+
+    // Simpan 1 akun bersama untuk semua akses
+    const session = loginUser(username, password);
+
+    // Hilangkan overlay login tanpa refresh
+    DOM.loginOverlay.classList.add('hidden');
+    sound.playCashRegister();
+    showToast(`Selamat datang, ${session.username}! Terhubung Realtime 🚀`, 'check-circle');
+
+    if (DOM.activeUserBadge) DOM.activeUserBadge.textContent = `Akun: ${session.username}`;
+    if (DOM.displayAuthUsername) DOM.displayAuthUsername.textContent = session.username;
+
+    // Aktifkan realtime listener Firestore
+    startRealtimeSync();
+    renderCart();
+    refreshIcons();
+  });
+
+  // Handle Logout
+  if (DOM.btnLogout) {
+    DOM.btnLogout.addEventListener('click', () => {
+      if (confirm('Keluar dari akun bersama ini?')) {
+        logoutUser();
+        updateConnectionUI('offline', 'Telah keluar');
+        DOM.loginOverlay.classList.remove('hidden');
+        showToast('Anda telah keluar dari akun.', 'log-out');
+        refreshIcons();
+      }
+    });
+  }
+}
+
 // ================= PWA Service Worker Registration =================
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -1160,7 +1327,14 @@ function initApp() {
   setupBudgetControls();
   setupSimulator();
   setupRecipesModule();
+  
+  // Daftarkan listener observer perubahan Store ke UI
+  Store.subscribe(() => {
+    renderCart();
+  });
+
   renderCart();
+  setupAuth();
   registerServiceWorker();
   refreshIcons();
 }
